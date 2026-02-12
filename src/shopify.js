@@ -1,49 +1,51 @@
 const axios = require('axios');
+const { getShopToken } = require('./store/shops');
 
 /**
- * Cliente para Shopify Admin GraphQL API
+ * Cliente dinámico para Shopify Admin API
+ * Soporta múltiples tiendas con diferentes tokens
  */
-
-let shopifyClient = null;
 
 /**
- * Inicializa el cliente de Shopify con las variables de entorno
- * @returns {boolean} true si la configuración es válida
+ * Crea un cliente de Shopify para una tienda específica
+ * @param {string} shop - Dominio de la tienda
+ * @returns {object|null} Cliente axios configurado o null si no hay token
  */
-function initShopifyClient() {
-  const shopDomain = process.env.SHOP_DOMAIN;
-  const adminToken = process.env.SHOP_ADMIN_TOKEN;
-  const apiVersion = process.env.API_VERSION;
-
-  if (!shopDomain || !adminToken || !apiVersion) {
-    return false;
+function createShopifyClient(shop) {
+  const accessToken = getShopToken(shop);
+  
+  if (!accessToken) {
+    return null;
   }
 
-  shopifyClient = axios.create({
-    baseURL: `https://${shopDomain}/admin/api/${apiVersion}/graphql.json`,
+  const apiVersion = process.env.API_VERSION || '2024-01';
+
+  return axios.create({
+    baseURL: `https://${shop}/admin/api/${apiVersion}`,
     headers: {
-      'X-Shopify-Access-Token': adminToken,
+      'X-Shopify-Access-Token': accessToken,
       'Content-Type': 'application/json',
     },
   });
-
-  return true;
 }
 
 /**
  * Ejecuta una query GraphQL contra Shopify Admin API
+ * @param {string} shop - Dominio de la tienda
  * @param {string} query - Query GraphQL
  * @param {object} variables - Variables para la query (opcional)
  * @returns {Promise<object>} Respuesta de Shopify
  * @throws {Error} Si hay error de conexión o Shopify devuelve errores
  */
-async function shopifyGraphQL(query, variables = {}) {
-  if (!shopifyClient) {
-    throw new Error('Shopify client not initialized. Check environment variables.');
+async function shopifyGraphQL(shop, query, variables = {}) {
+  const client = createShopifyClient(shop);
+  
+  if (!client) {
+    throw new Error(`No access token found for shop: ${shop}`);
   }
 
   try {
-    const response = await shopifyClient.post('', {
+    const response = await client.post('/graphql.json', {
       query,
       variables,
     });
@@ -76,15 +78,57 @@ async function shopifyGraphQL(query, variables = {}) {
 }
 
 /**
- * Verifica si el cliente de Shopify está configurado
+ * Ejecuta una petición REST contra Shopify Admin API
+ * @param {string} shop - Dominio de la tienda
+ * @param {string} method - Método HTTP (GET, POST, PUT, DELETE)
+ * @param {string} endpoint - Endpoint de la API (ej: /orders.json)
+ * @param {object} data - Datos para POST/PUT (opcional)
+ * @param {object} params - Query params (opcional)
+ * @returns {Promise<object>} Respuesta de Shopify
+ */
+async function shopifyREST(shop, method, endpoint, data = null, params = {}) {
+  const client = createShopifyClient(shop);
+  
+  if (!client) {
+    throw new Error(`No access token found for shop: ${shop}`);
+  }
+
+  try {
+    const config = {
+      method,
+      url: endpoint,
+      params,
+    };
+
+    if (data && (method === 'POST' || method === 'PUT')) {
+      config.data = data;
+    }
+
+    const response = await client(config);
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      const httpError = new Error(`Shopify API Error: ${error.response.status}`);
+      httpError.status = error.response.status;
+      httpError.details = error.response.data;
+      throw httpError;
+    }
+    throw new Error(`Connection error: ${error.message}`);
+  }
+}
+
+/**
+ * Verifica si una tienda tiene token configurado
+ * @param {string} shop - Dominio de la tienda
  * @returns {boolean}
  */
-function isShopifyConfigured() {
-  return shopifyClient !== null;
+function isShopConfigured(shop) {
+  return getShopToken(shop) !== null;
 }
 
 module.exports = {
-  initShopifyClient,
+  createShopifyClient,
   shopifyGraphQL,
-  isShopifyConfigured,
+  shopifyREST,
+  isShopConfigured,
 };

@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const authMiddleware = require('./middleware/auth');
 const ordersRouter = require('./routes/orders');
-const { initShopifyClient } = require('./shopify');
+const authRouter = require('./routes/auth');
 
 const app = express();
 
@@ -11,14 +11,15 @@ const app = express();
 app.use(express.json());
 
 /**
- * Valida las variables de entorno requeridas
+ * Valida las variables de entorno requeridas para OAuth
  * Retorna un array con las variables faltantes
  */
 function validateEnvVars() {
   const required = [
-    'SHOP_DOMAIN',
-    'SHOP_ADMIN_TOKEN',
-    'API_VERSION',
+    'SHOPIFY_API_KEY',
+    'SHOPIFY_API_SECRET',
+    'SCOPES',
+    'HOST',
     'API_BEARER_TOKEN',
   ];
 
@@ -36,16 +37,7 @@ if (missingVars.length > 0) {
   });
   console.error('');
   console.error('Please set these variables in your .env file or environment.');
-  console.error('The /health endpoint will work, but /v1/* endpoints will fail.');
   console.error('========================================');
-} else {
-  // Inicializar cliente de Shopify solo si todas las vars están presentes
-  const shopifyInitialized = initShopifyClient();
-  if (shopifyInitialized) {
-    console.log('[Shopify] Client initialized successfully');
-  } else {
-    console.error('[Shopify] Failed to initialize client');
-  }
 }
 
 // ============================================
@@ -57,8 +49,18 @@ if (missingVars.length > 0) {
  * Health check endpoint - no requiere autenticación
  */
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+  });
 });
+
+/**
+ * OAuth routes - no requieren autenticación Bearer
+ * GET /auth - Inicia flujo OAuth
+ * GET /auth/callback - Callback de Shopify
+ */
+app.use('/auth', authRouter);
 
 /**
  * Rutas protegidas bajo /v1
@@ -74,10 +76,16 @@ app.use('/v1/orders', ordersRouter);
 // ============================================
 
 const PORT = process.env.PORT || 3000;
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const HOST = process.env.HOST || `http://localhost:${PORT}`;
 
 app.listen(PORT, () => {
+  console.log('========================================');
   console.log(`Server running on port ${PORT}`);
-  console.log(`Health check: ${BASE_URL}/health`);
-  console.log(`Orders API: ${BASE_URL}/v1/orders`);
+  console.log(`Host: ${HOST}`);
+  console.log('');
+  console.log('Endpoints:');
+  console.log(`  Health:    ${HOST}/health`);
+  console.log(`  OAuth:     ${HOST}/auth?shop=tienda.myshopify.com`);
+  console.log(`  Orders:    ${HOST}/v1/orders?shop=tienda.myshopify.com`);
+  console.log('========================================');
 });
