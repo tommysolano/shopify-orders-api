@@ -74,9 +74,10 @@ app.use('/v1/orders', ordersRouter);
 // ============================================
 
 const PORT = process.env.PORT || 3000;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Orders API: http://localhost:${PORT}/v1/orders`);
+  console.log(`Health check: ${BASE_URL}/health`);
+  console.log(`Orders API: ${BASE_URL}/v1/orders`);
 });

@@ -25,6 +25,7 @@ cp .env.example .env
 | Variable | Descripción | Ejemplo |
 |----------|-------------|---------|
 | `PORT` | Puerto del servidor | `3000` |
+| `BASE_URL` | URL base de la API (para logs y referencias) | `https://shopify-orders-api.onrender.com` |
 | `SHOP_DOMAIN` | Dominio de tu tienda Shopify | `mi-tienda.myshopify.com` |
 | `SHOP_ADMIN_TOKEN` | Token de Admin API de Shopify | `shpat_xxxxx` |
 | `API_VERSION` | Versión de la API de Shopify | `2025-01` |
