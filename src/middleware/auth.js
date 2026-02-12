@@ -9,19 +9,36 @@ function authMiddleware(req, res, next) {
   // Si no hay token configurado, rechazar todas las requests
   if (!expectedToken) {
     console.error('[Auth] API_BEARER_TOKEN no está configurado');
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(500).json({
+      error: 'Server configuration error',
+      message: 'API_BEARER_TOKEN is not configured',
+    });
   }
 
-  // Verificar formato del header
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // Verificar que existe el header Authorization
+  if (!authHeader) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Missing Authorization header',
+    });
+  }
+
+  // Verificar formato del header (Bearer token)
+  if (!authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid Authorization header format. Expected: Bearer <token>',
+    });
   }
 
   // Extraer y validar el token
   const token = authHeader.slice(7); // Quitar "Bearer "
-  
+
   if (token !== expectedToken) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({
+      error: 'Unauthorized',
+      message: 'Invalid token',
+    });
   }
 
   next();
