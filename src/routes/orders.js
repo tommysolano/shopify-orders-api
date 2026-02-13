@@ -92,6 +92,26 @@ function formatOrder(order) {
   // Extraer cédula/RUC de las notas
   const cedulaRuc = extraerCedulaRuc(order.note);
 
+  // Información de envío
+  const envios = (order.shipping_lines || []).map((shipping) => ({
+    id: shipping.id,
+    titulo: shipping.title,
+    codigo: shipping.code,
+    precio: shipping.price,
+    precioDescontado: shipping.discounted_price,
+    origen: shipping.source,
+    impuestos: (shipping.tax_lines || []).map((tax) => ({
+      titulo: tax.title,
+      tasa: tax.rate ? `${(tax.rate * 100).toFixed(2)}%` : null,
+      precio: tax.price,
+    })),
+  }));
+
+  const totalEnvio = (order.shipping_lines || []).reduce(
+    (sum, line) => sum + parseFloat(line.price || 0),
+    0
+  ).toFixed(2);
+
   return {
     id: order.id,
     numeroPedido: order.name,
@@ -102,10 +122,14 @@ function formatOrder(order) {
     
     // Totales
     subtotal: order.subtotal_price,
+    totalEnvio: totalEnvio,
     totalImpuestos: totalImpuestos,
     totalDescuentos: totalDescuentos,
     total: order.total_price,
     moneda: order.currency,
+    
+    // Envío detallado
+    envios: envios,
     
     // Impuestos detallados
     impuestos: impuestos,
