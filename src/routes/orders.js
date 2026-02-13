@@ -6,32 +6,179 @@ const { validateAndNormalizeShop } = require('../utils/shopValidator');
 const router = express.Router();
 
 /**
- * Formatea una orden de Shopify al formato deseado
+ * Traduce el estado financiero al español
+ */
+function traducirEstadoFinanciero(status) {
+  const traducciones = {
+    pending: 'pendiente',
+    authorized: 'autorizado',
+    partially_paid: 'parcialmente_pagado',
+    paid: 'pagado',
+    partially_refunded: 'parcialmente_reembolsado',
+    refunded: 'reembolsado',
+    voided: 'anulado',
+  };
+  return traducciones[status] || status;
+}
+
+/**
+ * Traduce el estado de cumplimiento al español
+ */
+function traducirEstadoCumplimiento(status) {
+  const traducciones = {
+    fulfilled: 'completado',
+    partial: 'parcial',
+    unfulfilled: 'pendiente',
+    null: 'pendiente',
+  };
+  return traducciones[status] || status || 'pendiente';
+}
+
+/**
+ * Extrae la cédula/RUC de las notas del pedido
+ */
+function extraerCedulaRuc(note) {
+  if (!note) return null;
+  
+  // Buscar patrones comunes: "Cédula/RUC: 1234567890", "RUC: 1234", "Cédula: 1234"
+  const patterns = [
+    /c[ée]dula\s*\/?\s*ruc\s*:?\s*(\d+)/i,
+    /ruc\s*:?\s*(\d+)/i,
+    /c[ée]dula\s*:?\s*(\d+)/i,
+    /ci\s*:?\s*(\d+)/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = note.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Formatea una orden de Shopify al formato en español
  * @param {object} order - Orden de Shopify
  * @returns {object} Orden formateada
  */
 function formatOrder(order) {
+  // Calcular totales de impuestos
+  const impuestos = (order.tax_lines || []).map((tax) => ({
+    titulo: tax.title,
+    tasa: tax.rate ? `${(tax.rate * 100).toFixed(2)}%` : null,
+    precio: tax.price,
+  }));
+  
+  const totalImpuestos = order.total_tax || '0.00';
+
+  // Calcular descuentos
+  const descuentos = (order.discount_codes || []).map((discount) => ({
+    codigo: discount.code,
+    tipo: discount.type === 'percentage' ? 'porcentaje' : 'monto_fijo',
+    valor: discount.amount,
+  }));
+
+  const aplicacionesDescuento = (order.discount_applications || []).map((app) => ({
+    tipo: app.type,
+    titulo: app.title || app.description || app.code,
+    valor: app.value,
+    tipoValor: app.value_type === 'percentage' ? 'porcentaje' : 'monto_fijo',
+  }));
+
+  const totalDescuentos = order.total_discounts || '0.00';
+
+  // Extraer cédula/RUC de las notas
+  const cedulaRuc = extraerCedulaRuc(order.note);
+
   return {
     id: order.id,
-    name: order.name,
-    createdAt: order.created_at,
-    financialStatus: order.financial_status,
-    fulfillmentStatus: order.fulfillment_status,
-    totalPrice: order.total_price,
-    currency: order.currency,
-    customer: order.customer
+    numeroPedido: order.name,
+    fechaCreacion: order.created_at,
+    fechaActualizacion: order.updated_at,
+    estadoFinanciero: traducirEstadoFinanciero(order.financial_status),
+    estadoCumplimiento: traducirEstadoCumplimiento(order.fulfillment_status),
+    
+    // Totales
+    subtotal: order.subtotal_price,
+    totalImpuestos: totalImpuestos,
+    totalDescuentos: totalDescuentos,
+    total: order.total_price,
+    moneda: order.currency,
+    
+    // Impuestos detallados
+    impuestos: impuestos,
+    impuestosIncluidos: order.taxes_included || false,
+    
+    // Descuentos detallados
+    descuentos: descuentos,
+    aplicacionesDescuento: aplicacionesDescuento,
+    
+    // Notas y cédula/RUC
+    notas: order.note || null,
+    cedulaRuc: cedulaRuc,
+    atributosNotas: (order.note_attributes || []).map((attr) => ({
+      nombre: attr.name,
+      valor: attr.value,
+    })),
+    
+    // Cliente
+    cliente: order.customer
       ? {
-          firstName: order.customer.first_name,
-          lastName: order.customer.last_name,
+          id: order.customer.id,
+          nombre: order.customer.first_name,
+          apellido: order.customer.last_name,
+          nombreCompleto: `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim(),
           email: order.customer.email,
+          telefono: order.customer.phone,
         }
       : null,
-    lineItems: (order.line_items || []).map((item) => ({
+    
+    // Dirección de facturación
+    direccionFacturacion: order.billing_address
+      ? {
+          nombre: order.billing_address.name,
+          empresa: order.billing_address.company,
+          direccion1: order.billing_address.address1,
+          direccion2: order.billing_address.address2,
+          ciudad: order.billing_address.city,
+          provincia: order.billing_address.province,
+          codigoPostal: order.billing_address.zip,
+          pais: order.billing_address.country,
+          telefono: order.billing_address.phone,
+        }
+      : null,
+    
+    // Dirección de envío
+    direccionEnvio: order.shipping_address
+      ? {
+          nombre: order.shipping_address.name,
+          empresa: order.shipping_address.company,
+          direccion1: order.shipping_address.address1,
+          direccion2: order.shipping_address.address2,
+          ciudad: order.shipping_address.city,
+          provincia: order.shipping_address.province,
+          codigoPostal: order.shipping_address.zip,
+          pais: order.shipping_address.country,
+          telefono: order.shipping_address.phone,
+        }
+      : null,
+    
+    // Productos
+    productos: (order.line_items || []).map((item) => ({
+      id: item.id,
       sku: item.sku,
-      title: item.title,
-      quantity: item.quantity,
-      variantId: item.variant_id,
-      productId: item.product_id,
+      titulo: item.title,
+      variante: item.variant_title,
+      cantidad: item.quantity,
+      precioUnitario: item.price,
+      precioTotal: (parseFloat(item.price) * item.quantity).toFixed(2),
+      descuento: item.total_discount || '0.00',
+      impuesto: item.tax_lines ? item.tax_lines.reduce((sum, t) => sum + parseFloat(t.price || 0), 0).toFixed(2) : '0.00',
+      varianteId: item.variant_id,
+      productoId: item.product_id,
+      requiereEnvio: item.requires_shipping,
     })),
   };
 }
@@ -105,13 +252,13 @@ router.get('/', async (req, res) => {
       }
     );
 
-    const orders = (response.data.orders || []).map(formatOrder);
+    const pedidos = (response.data.orders || []).map(formatOrder);
 
     return res.json({
-      ok: true,
-      shop: normalizedShop,
-      count: orders.length,
-      orders,
+      exito: true,
+      tienda: normalizedShop,
+      cantidad: pedidos.length,
+      pedidos,
     });
   } catch (error) {
     console.error(`[Orders] Error fetching orders for ${normalizedShop}:`, error.message);
@@ -204,9 +351,9 @@ router.get('/:orderId', async (req, res) => {
     );
 
     return res.json({
-      ok: true,
-      shop: normalizedShop,
-      order: formatOrder(response.data.order),
+      exito: true,
+      tienda: normalizedShop,
+      pedido: formatOrder(response.data.order),
     });
   } catch (error) {
     console.error(`[Orders] Error fetching order ${orderId}:`, error.message);
