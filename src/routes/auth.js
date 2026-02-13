@@ -91,9 +91,10 @@ router.get('/', (req, res) => {
 
   // Validar que se proporcionó el shop
   if (!shop) {
+    const exampleShop = process.env.SHOP ? require('../utils/shopValidator').normalizeShopDomain(process.env.SHOP) : 'tienda.myshopify.com';
     return res.status(400).json({
       error: 'Missing required parameter: shop',
-      example: '/auth?shop=tienda.myshopify.com',
+      example: `/auth?shop=${exampleShop}`,
     });
   }
 

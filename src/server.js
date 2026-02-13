@@ -4,6 +4,7 @@ const express = require('express');
 const authMiddleware = require('./middleware/auth');
 const ordersRouter = require('./routes/orders');
 const authRouter = require('./routes/auth');
+const { normalizeShopDomain } = require('./utils/shopValidator');
 
 const app = express();
 
@@ -53,6 +54,7 @@ if (missingVars.length > 0) {
  */
 app.get('/', (req, res) => {
   const host = process.env.HOST || 'http://localhost:3000';
+  const shop = normalizeShopDomain(process.env.SHOP) || 'tu-tienda.myshopify.com';
   
   const html = `
 <!DOCTYPE html>
@@ -102,7 +104,7 @@ app.get('/', (req, res) => {
     <div class="links">
       <h3>Endpoints</h3>
       <a href="${host}/health">/health - Health check</a>
-      <a href="${host}/auth?shop=tu-tienda.myshopify.com">/auth?shop=... - Iniciar OAuth</a>
+      <a href="${host}/auth?shop=${shop}">/auth?shop=... - Iniciar OAuth</a>
       <p style="color:#6d7175; font-size:14px; margin-top:10px;">
         <strong>GET /v1/orders?shop=...</strong><br>
         Requiere header: <code>Authorization: Bearer &lt;token&gt;</code>
@@ -149,6 +151,7 @@ app.use('/v1/orders', ordersRouter);
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || `http://localhost:${PORT}`;
+const DEFAULT_SHOP = normalizeShopDomain(process.env.SHOP) || 'tu-tienda.myshopify.com';
 
 app.listen(PORT, () => {
   console.log('========================================');
@@ -158,7 +161,7 @@ app.listen(PORT, () => {
   console.log('Endpoints:');
   console.log(`  Root:      ${HOST}/`);
   console.log(`  Health:    ${HOST}/health`);
-  console.log(`  OAuth:     ${HOST}/auth?shop=tienda.myshopify.com`);
-  console.log(`  Orders:    ${HOST}/v1/orders?shop=tienda.myshopify.com`);
+  console.log(`  OAuth:     ${HOST}/auth?shop=${DEFAULT_SHOP}`);
+  console.log(`  Orders:    ${HOST}/v1/orders?shop=${DEFAULT_SHOP}`);
   console.log('========================================');
 });
