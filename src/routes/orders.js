@@ -190,20 +190,39 @@ function formatOrder(order) {
       : null,
     
     // Productos
-    productos: (order.line_items || []).map((item) => ({
-      id: item.id,
-      sku: item.sku,
-      titulo: item.title,
-      variante: item.variant_title,
-      cantidad: item.quantity,
-      precioUnitario: item.price,
-      precioTotal: (parseFloat(item.price) * item.quantity).toFixed(2),
-      descuento: item.total_discount || '0.00',
-      impuesto: item.tax_lines ? item.tax_lines.reduce((sum, t) => sum + parseFloat(t.price || 0), 0).toFixed(2) : '0.00',
-      varianteId: item.variant_id,
-      productoId: item.product_id,
-      requiereEnvio: item.requires_shipping,
-    })),
+    productos: [
+      ...(order.line_items || []).map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        titulo: item.title,
+        variante: item.variant_title,
+        cantidad: item.quantity,
+        precioUnitario: item.price,
+        precioTotal: (parseFloat(item.price) * item.quantity).toFixed(2),
+        descuento: item.total_discount || '0.00',
+        impuesto: item.tax_lines ? item.tax_lines.reduce((sum, t) => sum + parseFloat(t.price || 0), 0).toFixed(2) : '0.00',
+        varianteId: item.variant_id,
+        productoId: item.product_id,
+        requiereEnvio: item.requires_shipping,
+      })),
+      // Agregar el envío como producto si existe
+      ...(parseFloat(totalEnvio) > 0 ? [{
+        id: null,
+        sku: '4440',
+        titulo: 'ENVÍO LOCAL 15%',
+        variante: null,
+        cantidad: 1,
+        precioUnitario: totalEnvio,
+        precioTotal: totalEnvio,
+        descuento: '0.00',
+        impuesto: (order.shipping_lines || []).reduce((sum, line) => 
+          sum + (line.tax_lines || []).reduce((taxSum, t) => taxSum + parseFloat(t.price || 0), 0), 0
+        ).toFixed(2),
+        varianteId: null,
+        productoId: null,
+        requiereEnvio: false,
+      }] : []),
+    ],
   };
 }
 
