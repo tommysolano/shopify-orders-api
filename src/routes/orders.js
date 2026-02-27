@@ -291,6 +291,7 @@ router.get('/', async (req, res) => {
         params: {
           limit: Math.min(Math.max(parseInt(limit) || 10, 1), 250),
           status: status,
+          financial_status: 'paid',
         },
       }
     );
