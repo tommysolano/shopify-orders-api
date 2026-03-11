@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const express = require('express');
-const authMiddleware = require('./middleware/auth');
 const ordersRouter = require('./routes/orders');
 const authRouter = require('./routes/auth');
 const { normalizeShopDomain } = require('./utils/shopValidator');
@@ -136,13 +135,7 @@ app.get('/health', (req, res) => {
  */
 app.use('/auth', authRouter);
 
-/**
- * Rutas protegidas bajo /v1
- * Todas requieren Authorization: Bearer <API_BEARER_TOKEN>
- */
-app.use('/v1', authMiddleware);
-
-// Montar router de orders
+// Rutas bajo /v1 (acceso público)
 app.use('/v1/orders', ordersRouter);
 
 // ============================================
