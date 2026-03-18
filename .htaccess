@@ -1,0 +1,46 @@
+# Shopify Orders API - PHP Version
+# Redirige todas las peticiones a index.php
+
+RewriteEngine On
+
+# Pasar el header Authorization a PHP (necesario en cPanel/Apache)
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Si el archivo o directorio existe físicamente, no redirigir
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Redirigir todo a index.php
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Proteger archivos sensibles
+<FilesMatch "\.(env|json|php)$">
+    # Solo permitir index.php
+    <If "%{REQUEST_URI} !~ m#^/index\.php$#">
+        # Permitir acceso a index.php pero bloquear otros .php directos
+    </If>
+</FilesMatch>
+
+# Bloquear acceso directo a archivos de configuración
+<FilesMatch "^\.env$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^shops\.json$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^nonces\.json$">
+    Require all denied
+</FilesMatch>
+
+# Bloquear acceso a la carpeta php/
+RedirectMatch 403 ^/php/
+
+# Bloquear acceso a node_modules (si existe)
+RedirectMatch 403 ^/node_modules/
+
+# Bloquear acceso a archivos de Node.js
+<FilesMatch "^(package\.json|package-lock\.json)$">
+    Require all denied
+</FilesMatch>
