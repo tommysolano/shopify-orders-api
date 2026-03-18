@@ -1,0 +1,5 @@
+.git
+node_modules
+.env
+shops.json
+nonces.json
