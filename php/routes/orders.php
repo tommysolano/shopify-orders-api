@@ -278,7 +278,7 @@ function handleGetOrders() {
     $status = isset($_GET['status']) ? $_GET['status'] : 'any';
     $fechaDesde = isset($_GET['fecha_desde']) ? $_GET['fecha_desde'] : null;
     $fechaHasta = isset($_GET['fecha_hasta']) ? $_GET['fecha_hasta'] : null;
-    $envioMinimo = isset($_GET['envio_minimo']) ? floatval($_GET['envio_minimo']) : null;
+    $totalMinimo = isset($_GET['total_minimo']) ? floatval($_GET['total_minimo']) : null;
 
     // Validar que se proporcionó el shop
     if (!$shop) {
@@ -446,25 +446,51 @@ function handleGetOrders() {
             $pedidos[] = $pedido;
         }
 
-        // Filtro local: solo pedidos con costo envío LAAR >= $envioMinimo
-        if ($envioMinimo !== null) {
-            $pedidos = array_values(array_filter($pedidos, function($pedido) use ($envioMinimo) {
-                $costo = floatval(str_replace(',', '.', $pedido['costoEnvioLaar'] ?? '0'));
-                return $costo >= $envioMinimo;
+        // Filtro local: solo pedidos con total >= $totalMinimo
+        if ($totalMinimo !== null) {
+            $pedidos = array_values(array_filter($pedidos, function($pedido) use ($totalMinimo) {
+                return floatval($pedido['total']) >= $totalMinimo;
             }));
         }
 
-        jsonResponse(200, [
+        // Calcular costo LAAR: suma de costoEnvioLaar de pedidos con total >= $50
+        $costoLaar = null;
+        if ($fechaDesde || $fechaHasta) {
+            $costoLaar = 0;
+            $pedidosCostoLaar = 0;
+            foreach ($pedidos as $pedido) {
+                if (floatval($pedido['total']) >= 50) {
+                    $costo = floatval(str_replace(',', '.', $pedido['costoEnvioLaar'] ?? '0'));
+                    $costoLaar += $costo;
+                    $pedidosCostoLaar++;
+                }
+            }
+            $costoLaar = number_format($costoLaar, 2, '.', '');
+        }
+
+        $response = [
             'exito' => true,
             'tienda' => $normalizedShop,
             'cantidad' => count($pedidos),
             'filtros' => array_filter([
                 'fecha_desde' => $fechaDesde,
                 'fecha_hasta' => $fechaHasta,
-                'envio_minimo' => $envioMinimo,
+                'total_minimo' => $totalMinimo,
             ], function($v) { return $v !== null; }),
-            'pedidos' => $pedidos,
-        ]);
+        ];
+
+        // Incluir resumen de costo LAAR cuando se filtra por fecha
+        if ($costoLaar !== null) {
+            $response['costoLaar'] = [
+                'descripcion' => 'Suma de costos de envío LAAR de pedidos con total >= $50',
+                'pedidosIncluidos' => $pedidosCostoLaar,
+                'totalCostoEnvio' => $costoLaar,
+            ];
+        }
+
+        $response['pedidos'] = $pedidos;
+
+        jsonResponse(200, $response);
 
     } catch (Exception $e) {
         error_log("[Orders] Error fetching orders for $normalizedShop: " . $e->getMessage());
