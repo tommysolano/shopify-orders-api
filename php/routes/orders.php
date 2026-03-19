@@ -324,7 +324,7 @@ function handleGetOrders() {
         return;
     }
 
-    $apiVersion = env('API_VERSION', '2024-01');
+    $apiVersion = env('API_VERSION', '2025-01');
 
     try {
         // Limitar el valor de limit entre 1 y 250
@@ -350,7 +350,6 @@ function handleGetOrders() {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             throw new Exception("Connection error: $curlError");
@@ -447,7 +446,7 @@ function handleGetOrder($orderId) {
     }
 
     $accessToken = getShopToken($normalizedShop);
-    $apiVersion = env('API_VERSION', '2024-01');
+    $apiVersion = env('API_VERSION', '2025-01');
 
     // Validar que orderId sea numérico
     if (!ctype_digit((string)$orderId)) {
@@ -473,7 +472,6 @@ function handleGetOrder($orderId) {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlError = curl_error($ch);
-        curl_close($ch);
 
         if ($curlError) {
             throw new Exception("Connection error: $curlError");

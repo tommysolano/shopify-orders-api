@@ -42,8 +42,6 @@ function httpRequest($method, $url, $headers = [], $data = null, $params = []) {
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
     
-    curl_close($ch);
-    
     if ($error) {
         return [
             'status' => 0,
@@ -82,7 +80,7 @@ function shopifyGraphQL($shop, $query, $variables = []) {
         throw new Exception("No access token found for shop: $shop");
     }
 
-    $apiVersion = env('API_VERSION', '2024-01');
+    $apiVersion = env('API_VERSION', '2025-01');
     $url = "https://$shop/admin/api/$apiVersion/graphql.json";
     
     $result = httpRequest('POST', $url, getShopifyHeaders($accessToken), json_encode([
@@ -115,7 +113,7 @@ function shopifyREST($shop, $method, $endpoint, $data = null, $params = []) {
         throw new Exception("No access token found for shop: $shop");
     }
 
-    $apiVersion = env('API_VERSION', '2024-01');
+    $apiVersion = env('API_VERSION', '2025-01');
     $url = "https://$shop/admin/api/$apiVersion$endpoint";
     
     $result = httpRequest($method, $url, getShopifyHeaders($accessToken), $data, $params);

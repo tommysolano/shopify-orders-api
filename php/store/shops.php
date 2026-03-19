@@ -60,11 +60,31 @@ function saveShopToken($shop, $accessToken) {
 
 /**
  * Obtiene el access_token de una tienda
+ * Primero busca en shops.json, luego en SHOP_ADMIN_TOKEN si el shop coincide
  * @return string|null Access token o null si no existe
  */
 function getShopToken($shop) {
     $shops = readShops();
-    return isset($shops[$shop]['access_token']) ? $shops[$shop]['access_token'] : null;
+    if (isset($shops[$shop]['access_token'])) {
+        return $shops[$shop]['access_token'];
+    }
+    
+    // Fallback: si el shop coincide con SHOP_DOMAIN o SHOP, usar SHOP_ADMIN_TOKEN
+    $shopDomain = getenv('SHOP_DOMAIN') ?: getenv('SHOP');
+    $adminToken = getenv('SHOP_ADMIN_TOKEN');
+    
+    if ($adminToken && $shopDomain) {
+        // Normalizar para comparar
+        $shopDomain = strtolower(trim($shopDomain));
+        $shopDomain = preg_replace('/^https?:\/\//i', '', $shopDomain);
+        $shopDomain = rtrim(explode('/', $shopDomain)[0], '/');
+        
+        if ($shop === $shopDomain) {
+            return $adminToken;
+        }
+    }
+    
+    return null;
 }
 
 /**
