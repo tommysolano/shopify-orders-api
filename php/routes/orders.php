@@ -408,12 +408,49 @@ function handleGetOrders() {
 
         $data = json_decode($response, true);
         $orders = isset($data['orders']) ? $data['orders'] : [];
-        $pedidos = array_map('formatOrder', $orders);
 
-        // Filtro local: solo pedidos con envío >= $envioMinimo
+        // Obtener metacampos de cada orden para extraer "Costo Envío LAAR"
+        $pedidos = [];
+        foreach ($orders as $order) {
+            $pedido = formatOrder($order);
+
+            // Consultar metacampos del pedido
+            $metaUrl = "https://$normalizedShop/admin/api/$apiVersion/orders/{$order['id']}/metafields.json";
+            $mch = curl_init();
+            curl_setopt($mch, CURLOPT_URL, $metaUrl);
+            curl_setopt($mch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($mch, CURLOPT_TIMEOUT, 15);
+            curl_setopt($mch, CURLOPT_HTTPHEADER, [
+                'X-Shopify-Access-Token: ' . $accessToken,
+                'Content-Type: application/json',
+            ]);
+            $metaResponse = curl_exec($mch);
+            $metaCode = curl_getinfo($mch, CURLINFO_HTTP_CODE);
+            curl_close($mch);
+
+            $costoEnvioLaar = null;
+            if ($metaCode === 200) {
+                $metaData = json_decode($metaResponse, true);
+                $metafields = isset($metaData['metafields']) ? $metaData['metafields'] : [];
+                foreach ($metafields as $mf) {
+                    $key = isset($mf['key']) ? $mf['key'] : '';
+                    // Buscar por key que contenga "costo_envio" o por el label conocido
+                    if (stripos($key, 'costo_env') !== false || stripos($key, 'costo-env') !== false || stripos($key, 'shipping_cost') !== false) {
+                        $costoEnvioLaar = $mf['value'];
+                        break;
+                    }
+                }
+            }
+
+            $pedido['costoEnvioLaar'] = $costoEnvioLaar;
+            $pedidos[] = $pedido;
+        }
+
+        // Filtro local: solo pedidos con costo envío LAAR >= $envioMinimo
         if ($envioMinimo !== null) {
             $pedidos = array_values(array_filter($pedidos, function($pedido) use ($envioMinimo) {
-                return floatval($pedido['totalEnvio']) >= $envioMinimo;
+                $costo = floatval(str_replace(',', '.', $pedido['costoEnvioLaar'] ?? '0'));
+                return $costo >= $envioMinimo;
             }));
         }
 
