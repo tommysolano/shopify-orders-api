@@ -276,6 +276,9 @@ function handleGetOrders() {
     $shop = isset($_GET['shop']) ? $_GET['shop'] : null;
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
     $status = isset($_GET['status']) ? $_GET['status'] : 'any';
+    $fechaDesde = isset($_GET['fecha_desde']) ? $_GET['fecha_desde'] : null;
+    $fechaHasta = isset($_GET['fecha_hasta']) ? $_GET['fecha_hasta'] : null;
+    $envioMinimo = isset($_GET['envio_minimo']) ? floatval($_GET['envio_minimo']) : null;
 
     // Validar que se proporcionó el shop
     if (!$shop) {
@@ -330,11 +333,29 @@ function handleGetOrders() {
         // Limitar el valor de limit entre 1 y 250
         $limit = max(1, min($limit, 250));
         
-        $params = http_build_query([
+        $queryParams = [
             'limit' => $limit,
             'status' => $status,
             'financial_status' => 'paid',
-        ]);
+        ];
+
+        // Filtros de fecha (formato dd-mm-aa, ej: 01-03-26)
+        if ($fechaDesde) {
+            $parsed = DateTime::createFromFormat('d-m-y', $fechaDesde);
+            if ($parsed) {
+                $parsed->setTime(0, 0, 0);
+                $queryParams['created_at_min'] = $parsed->format('c');
+            }
+        }
+        if ($fechaHasta) {
+            $parsed = DateTime::createFromFormat('d-m-y', $fechaHasta);
+            if ($parsed) {
+                $parsed->setTime(23, 59, 59);
+                $queryParams['created_at_max'] = $parsed->format('c');
+            }
+        }
+
+        $params = http_build_query($queryParams);
 
         $url = "https://$normalizedShop/admin/api/$apiVersion/orders.json?$params";
         
@@ -389,10 +410,22 @@ function handleGetOrders() {
         $orders = isset($data['orders']) ? $data['orders'] : [];
         $pedidos = array_map('formatOrder', $orders);
 
+        // Filtro local: solo pedidos con envío >= $envioMinimo
+        if ($envioMinimo !== null) {
+            $pedidos = array_values(array_filter($pedidos, function($pedido) use ($envioMinimo) {
+                return floatval($pedido['totalEnvio']) >= $envioMinimo;
+            }));
+        }
+
         jsonResponse(200, [
             'exito' => true,
             'tienda' => $normalizedShop,
             'cantidad' => count($pedidos),
+            'filtros' => array_filter([
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+                'envio_minimo' => $envioMinimo,
+            ], function($v) { return $v !== null; }),
             'pedidos' => $pedidos,
         ]);
 
