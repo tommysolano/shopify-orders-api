@@ -215,14 +215,27 @@ function formatOrder($order) {
         ];
     };
 
-    // Atributos de notas
+    // Atributos de notas (filtrar datos internos como __data)
     $noteAttributes = isset($order['note_attributes']) ? $order['note_attributes'] : [];
+    $filteredAttributes = array_filter($noteAttributes, function($attr) {
+        return strpos($attr['name'], '__') !== 0;
+    });
     $atributosNotas = array_map(function($attr) {
         return [
             'nombre' => $attr['name'],
             'valor' => $attr['value'],
         ];
-    }, $noteAttributes);
+    }, array_values($filteredAttributes));
+
+    // Extraer cédula/RUC desde note_attributes si no se encontró en las notas
+    if (!$cedulaRuc) {
+        foreach ($noteAttributes as $attr) {
+            if (in_array($attr['name'], ['cedula_ruc', 'document_number'])) {
+                $cedulaRuc = $attr['value'];
+                break;
+            }
+        }
+    }
 
     return [
         'id' => $order['id'],
