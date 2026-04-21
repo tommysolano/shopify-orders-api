@@ -7,6 +7,7 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../store/shops.php';
+require_once __DIR__ . '/../store/packs.php';
 require_once __DIR__ . '/../utils/shopValidator.php';
 
 /**
@@ -44,12 +45,13 @@ function traducirEstadoCumplimiento($status) {
 function extraerCedulaRuc($note) {
     if (!$note) return null;
     
-    // Buscar patrones comunes
+    // Buscar patrones comunes (flag /u para soporte UTF-8 con caracteres acentuados)
     $patterns = [
-        '/c[ée]dula\s*\/?\s*ruc\s*:?\s*(\d+)/i',
-        '/ruc\s*:?\s*(\d+)/i',
-        '/c[ée]dula\s*:?\s*(\d+)/i',
-        '/ci\s*:?\s*(\d+)/i',
+        '/c[ée]dula\s*\/?\s*ruc\s*[-:.]?\s*(\d+)/iu',
+        '/ruc\s*[-:.]?\s*(\d+)/iu',
+        '/documento\s*:\s*c[ée]dula\s*[-:.]?\s*(\d+)/iu',
+        '/c[ée]dula\s*[-:.]?\s*(\d+)/iu',
+        '/ci\s*[-:.]?\s*(\d+)/iu',
     ];
     
     foreach ($patterns as $pattern) {
@@ -141,7 +143,7 @@ function formatOrder($order) {
             return $sum + floatval(isset($t['price']) ? $t['price'] : 0);
         }, 0), 2, '.', '');
         
-        return [
+        $producto = [
             'id' => $item['id'],
             'sku' => isset($item['sku']) ? $item['sku'] : null,
             'titulo' => $item['title'],
@@ -154,7 +156,56 @@ function formatOrder($order) {
             'varianteId' => isset($item['variant_id']) ? $item['variant_id'] : null,
             'productoId' => isset($item['product_id']) ? $item['product_id'] : null,
             'requiereEnvio' => isset($item['requires_shipping']) ? $item['requires_shipping'] : false,
+            'esPack' => false,
+            'desglose' => null,
         ];
+
+        // Verificar si el producto es un pack/kit
+        $pack = findPackByTitle($item['title']);
+        if ($pack) {
+            $cantidad = $item['quantity'];
+
+            // Precio real pagado por el cliente según Shopify (precio unitario × cantidad − descuento aplicado)
+            // total_discount incluye cualquier código de descuento del cliente aplicado al line_item
+            $precioShopify   = floatval($item['price']);
+            $descuentoShopify = floatval(isset($item['total_discount']) ? $item['total_discount'] : '0');
+            $totalPagado     = $precioShopify * $cantidad - $descuentoShopify;
+
+            // Total original sin ningún descuento (suma de los PVP individuales × cantidad)
+            $totalOriginal = floatval($pack['totalSinDescuento']) * $cantidad;
+
+            // Factor real de descuento: proporción del precio pagado respecto al precio original
+            $factorDescuento = $totalOriginal > 0 ? $totalPagado / $totalOriginal : 1.0;
+
+            // Porcentaje de descuento efectivo total (pack + código de cliente)
+            $descuentoEfectivo = round((1 - $factorDescuento) * 100, 2);
+
+            $producto['esPack'] = true;
+            $producto['desglose'] = [
+                'nombrePack'         => $pack['nombre'],
+                'descuentoPorcentaje' => $descuentoEfectivo . '%',
+                'pvpSugeridoWeb'     => $pack['pvpSugeridoWeb'],
+                'totalSinDescuento'  => number_format($totalOriginal, 2, '.', ''),
+                'totalConDescuento'  => number_format($totalPagado, 2, '.', ''),
+                'productos' => array_map(function($p) use ($cantidad, $factorDescuento, $descuentoEfectivo) {
+                    // Precio efectivo por unidad: precio original × factor de descuento real
+                    $precioEfectivo = number_format(floatval($p['precioUnitario']) * $factorDescuento, 2, '.', '');
+                    return [
+                        'sku'              => $p['sku'],
+                        'titulo'           => $p['titulo'],
+                        'pvpSinIva'        => $p['pvpSinIva'],
+                        'iva'              => $p['iva'],
+                        'cantidad'         => $cantidad,
+                        'precioUnitario'   => $p['precioUnitario'],
+                        'descuento'        => $descuentoEfectivo . '%',
+                        'precioConDescuento' => $precioEfectivo,
+                        'precioTotalLinea' => number_format(floatval($precioEfectivo) * $cantidad, 2, '.', ''),
+                    ];
+                }, $pack['productos']),
+            ];
+        }
+
+        return $producto;
     }, $lineItems);
 
     // Agregar el envío como producto si existe
@@ -353,15 +404,17 @@ function handleGetOrders() {
         ];
 
         // Filtros de fecha (formato dd-mm-aa, ej: 01-03-26)
+        // Usar zona horaria de Ecuador (UTC-5) para que las fechas coincidan con la tienda
+        $tz = new DateTimeZone('America/Guayaquil');
         if ($fechaDesde) {
-            $parsed = DateTime::createFromFormat('d-m-y', $fechaDesde);
+            $parsed = DateTime::createFromFormat('d-m-y', $fechaDesde, $tz);
             if ($parsed) {
                 $parsed->setTime(0, 0, 0);
                 $queryParams['created_at_min'] = $parsed->format('c');
             }
         }
         if ($fechaHasta) {
-            $parsed = DateTime::createFromFormat('d-m-y', $fechaHasta);
+            $parsed = DateTime::createFromFormat('d-m-y', $fechaHasta, $tz);
             if ($parsed) {
                 $parsed->setTime(23, 59, 59);
                 $queryParams['created_at_max'] = $parsed->format('c');
